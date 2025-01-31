@@ -181,8 +181,6 @@ Base.metadata.create_all(engine)
 
 # Create a session to interact with the database
 Session = sessionmaker(bind=engine)
-session = Session()
-
 @contextmanager
 def session_scope():
     session = Session()
@@ -191,26 +189,23 @@ def session_scope():
     finally:
         session.close()
 
-def create_alert(session, alert_type, title, description, time_now):
+def create_alert(session, alert_type, title, description):
     alert_entry = Alert(
         type=alert_type, 
         title=title, 
-        description=description, 
-        timestamp=time_now, 
-        read=False
+        description=description
     )
     session.add(alert_entry)
 
-def create_data_entry(session, db_class, value, threshold, alert_type, data_type, time_now):
+def create_data_entry(session, db_class, value, threshold, alert_type, data_type):
     data_entry = db_class.create_with_last_known(session)
     data_entry.reported_value = value
-    data_entry.timestamp = time_now
     session.add(data_entry)
 
     # Only Generate a Single Unset Alert
     if data_entry.set_value == 0.0 and not _UNSET_STATES[data_type]:
         create_alert(session, alert_type, f"{data_type} Alert", 
-                     f'User has not specified set {data_type.lower()}.', time_now)
+                     f'User has not specified set {data_type.lower()}.')
     else:
         # Only Generate a Single Threshold Alert until Vitals Recover
         if (not _ALERT_STATES[data_type] and 
@@ -218,7 +213,7 @@ def create_data_entry(session, db_class, value, threshold, alert_type, data_type
              (alert_type == 2 and data_entry.reported_value < threshold))):
             _ALERT_STATES[data_type] = True
             create_alert(session, alert_type, f"{data_type} Alert", 
-                        f'The {data_type.lower()} difference exceeded the threshold.', time_now)
+                        f'The {data_type.lower()} difference exceeded the threshold.')
         elif (_ALERT_STATES[data_type] and 
               ((alert_type != 2 and abs(data_entry.reported_value - data_entry.set_value) <= threshold) or
                (alert_type == 2 and data_entry.reported_value >= threshold))):
@@ -226,11 +221,11 @@ def create_data_entry(session, db_class, value, threshold, alert_type, data_type
     
 
 def database_insertion(temp, orp, pH):
-    with session_scope() as session():
-        time_now = datetime.datetime.now(datetime.timezone.utc)
-        create_data_entry(session, Temperature, temp, _TEMP_THRESHOLD, 0, "Temperature", time_now)
-        create_data_entry(session, PH, pH, _PH_THRESHOLD, 1, "pH", time_now)
-        create_data_entry(session, DissolvedOxygen, orp, _ORP_LOWER_THRESHOLD, 2, "Oxygen", time_now)
+    with session_scope() as session:
+        create_data_entry(session, Temperature, temp, _TEMP_THRESHOLD, 0, "Temperature")
+        create_data_entry(session, PH, pH, _PH_THRESHOLD, 1, "pH")
+        create_data_entry(session, DissolvedOxygen, orp, _ORP_LOWER_THRESHOLD, 2, "Oxygen")
+        session.commit()
 
 def main():
     try:
