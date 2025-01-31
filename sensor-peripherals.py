@@ -266,3 +266,6 @@ def main():
         RPi.GPIO.cleanup()
 
     return 0
+
+if __name__ == '__main__':
+    main()
