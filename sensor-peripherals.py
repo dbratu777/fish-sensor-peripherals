@@ -175,8 +175,7 @@ class Alert(Base):
     read = Column(Boolean, default=False)
 
 # Set up the database engine
-# TODO: Replace with path to webapp's database
-engine = create_engine('sqlite:///values.db', echo=True) 
+engine = create_engine('sqlite:///../fish-flask-app/instance/values.db', echo=True) 
 Base.metadata.create_all(engine)
 
 # Create a session to interact with the database
