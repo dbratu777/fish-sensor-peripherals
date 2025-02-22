@@ -3,7 +3,7 @@ import datetime
 import glob
 import os
 import time
-import adafruit_ads1x15
+import Adafruit_ADS1x15
 import RPi.GPIO
 
 from RPLCD.i2c import CharLCD
@@ -24,7 +24,7 @@ _PH_SLOPE               = 200
 _PH_NEUTRAL_VOLTAGE     = 3235  # ~= pH 7 (in mV)
 _TEMP_RELAY_PIN         = 23
 
-_ADC    = adafruit_ads1x15.ADS1115(busnum=1)
+_ADC    = Adafruit_ADS1x15.ADS1115(busnum=1)
 _GAIN   = 1
 
 #TODO: Define proper thresholds for testing
@@ -134,13 +134,11 @@ class Measurement(Base):
     def create_with_last_known(cls, session):
         last_record = session.query(cls).order_by(cls.timestamp.desc()).first()
         if last_record:
-            reported_value = last_record.reported_value
             set_value = last_record.set_value
         else:
-            reported_value = 0.0
             set_value = 0.0
         
-        return cls(reported_value=reported_value, set_value=set_value)
+        return cls(set_value=set_value)
 
 class Temperature(Measurement):
     __tablename__ = 'temperatures'
@@ -175,7 +173,7 @@ class Alert(Base):
     read = Column(Boolean, default=False)
 
 # Set up the database engine
-engine = create_engine('sqlite:///../fish-flask-app/instance/values.db', echo=True) 
+engine = create_engine('sqlite:///../fish-flask-app/instance/values.db', echo=False) 
 Base.metadata.create_all(engine)
 
 # Create a session to interact with the database
@@ -189,16 +187,22 @@ def session_scope():
         session.close()
 
 def create_alert(session, alert_type, title, description):
+    timestamp = datetime.datetime.now(datetime.timezone.utc)
+
     alert_entry = Alert(
         type=alert_type, 
         title=title, 
-        description=description
+        description=description,
+        timestamp=timestamp
     )
     session.add(alert_entry)
 
 def create_data_entry(session, db_class, value, threshold, alert_type, data_type):
+    timestamp = datetime.datetime.now(datetime.timezone.utc)
+
     data_entry = db_class.create_with_last_known(session)
     data_entry.reported_value = value
+    data_entry.timestamp = timestamp
     session.add(data_entry)
 
     # Only Generate a Single Unset Alert
@@ -250,7 +254,7 @@ def main():
             lcd.write_string(f'ORP: {orp:.2f}')
             lcd.write_string(f'PH: {pH:.2f}')
 
-            database_insertion(temp_f, orp, pH)
+            database_insertion(round(temp_f, 2), round(orp, 2), round(pH, 2))
             time.sleep(1) #TODO: find a reasonable value to increase this to (no need to flood database)
 
     except KeyboardInterrupt:
