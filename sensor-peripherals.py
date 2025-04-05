@@ -245,16 +245,17 @@ def main():
             temp_relay(temp_f, _TEMP_THRESHOLD)
             orp_relay(orp)
 
-            lcd = CharLCD(i2c_expander='PCF8574', address=0x27, port=1, cols=16, rows=2, dotsize=8)
+            database_insertion(round(temp_f, 2), round(orp, 2), round(pH, 2))
+
+            lcd = CharLCD(i2c_expander='PCF8574', address=0x27, port=1, cols=20, rows=4, dotsize=8)
             lcd.clear()
 
             lcd.cursor_pos = (0, 0)
 
-            lcd.write_string(f'TEMP: {temp_f:.2f}')
-            lcd.write_string(f'ORP: {orp:.2f}')
-            lcd.write_string(f'PH: {pH:.2f}')
+            lcd.write_string(f'TEMP: {temp_f:.1f} dF {"ALERT!" if _ALERT_STATES["Temperature"] else ""}\n\r')
+            lcd.write_string(f'ORP: {orp:.1f} mV {"ALERT!" if _ALERT_STATES["Oxygen"] else ""}\n\r')
+            lcd.write_string(f'PH:    {pH:.1f} pH {"ALERT!" if _ALERT_STATES["pH"] else ""}\n\r')
 
-            database_insertion(round(temp_f, 2), round(orp, 2), round(pH, 2))
             time.sleep(1) #TODO: find a reasonable value to increase this to (no need to flood database)
 
     except KeyboardInterrupt:
