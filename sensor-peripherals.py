@@ -28,10 +28,9 @@ _ADC    = Adafruit_ADS1x15.ADS1115(busnum=1)
 _GAIN   = 1
 
 #TODO: Define proper thresholds for testing
-_ORP_UPPER_THRESHOLD    = 80
-_ORP_LOWER_THRESHOLD    = 50
-_PH_THRESHOLD           = 1
-_TEMP_THRESHOLD         = 5
+_ORP_THRESHOLD          = 15    #(mv)
+_PH_THRESHOLD           = 0.5   #(pH)
+_TEMP_THRESHOLD         = 1     #(F)
 
 _ALERT_STATES = {
     "Temperature": False,
@@ -46,8 +45,8 @@ _UNSET_STATES = {
 
 ### ----------------------- SENSOR AND GPIO SETUP
 
-os.system('modprobe w1-gpio')
-os.system('modprobe w1-therm')
+# os.system('modprobe w1-gpio')
+# os.system('modprobe w1-therm')
 
 _TEMP_DIR = glob.glob('/sys/bus/w1/devices/' + '28*')  # Look for DS18B20 devices
 if not _TEMP_DIR:
@@ -69,11 +68,11 @@ def read_orp():
         return 0.0
     return (voltage - _ORP_ZERO_VOLTAGE) / _ORP_SLOPE
 
-def orp_relay(orp_value):
-    if orp_value < _ORP_LOWER_THRESHOLD:
+def orp_relay(activate):
+    if activate:
         RPi.GPIO.output(_ORP_RELAY_PIN, RPi.GPIO.HIGH)
         print(f'\tORP RELAY: ON')
-    elif orp_value > _ORP_UPPER_THRESHOLD:
+    else:
         RPi.GPIO.output(_ORP_RELAY_PIN, RPi.GPIO.LOW)
         print(f'\tORP RELAY: OFF')
 
@@ -109,12 +108,12 @@ def read_temp():
     temp_f = (float(temp_string) / 1000.0) * (9.0 / 5.0) + 32.0
     return temp_f
 
-def temp_relay(temp_f, threshold): 
-    if temp_f < (threshold):
+def temp_relay(activate): 
+    if activate:
         # if RPi.GPIO.input(_TEMP_RELAY_PIN) == RPi.GPIO.LOW:
         RPi.GPIO.output(_TEMP_RELAY_PIN, RPi.GPIO.HIGH)
         print(f'\tTEMP RELAY: ON')
-    elif temp_f > (threshold + 2):
+    else:
         # if RPi.GPIO.input(_TEMP_RELAY_PIN) == RPi.GPIO.HIGH:
         RPi.GPIO.output(_TEMP_RELAY_PIN, RPi.GPIO.LOW)
         print(f'\tTEMP RELAY: OFF')
@@ -212,22 +211,28 @@ def create_data_entry(session, db_class, value, threshold, alert_type, data_type
     else:
         # Only Generate a Single Threshold Alert until Vitals Recover
         if (not _ALERT_STATES[data_type] and 
-            ((alert_type != 2 and abs(data_entry.reported_value - data_entry.set_value) > threshold) or
-             (alert_type == 2 and data_entry.reported_value < threshold))):
+            abs(data_entry.reported_value - data_entry.set_value) > threshold):
             _ALERT_STATES[data_type] = True
             create_alert(session, alert_type, f"{data_type} Alert", 
                         f'The {data_type.lower()} difference exceeded the threshold.')
+            if alert_type == 0:
+                temp_relay(True)
+            elif alert_type ==2:
+                orp_relay(True)
         elif (_ALERT_STATES[data_type] and 
-              ((alert_type != 2 and abs(data_entry.reported_value - data_entry.set_value) <= threshold) or
-               (alert_type == 2 and data_entry.reported_value >= threshold))):
+              abs(data_entry.reported_value - data_entry.set_value) <= threshold):
             _ALERT_STATES[data_type] = False
+            if alert_type == 0:
+                temp_relay(False)
+            elif alert_type ==2:
+                orp_relay(False)
     
 
 def database_insertion(temp, orp, pH):
     with session_scope() as session:
         create_data_entry(session, Temperature, temp, _TEMP_THRESHOLD, 0, "Temperature")
         create_data_entry(session, PH, pH, _PH_THRESHOLD, 1, "pH")
-        create_data_entry(session, DissolvedOxygen, orp, _ORP_LOWER_THRESHOLD, 2, "Oxygen")
+        create_data_entry(session, DissolvedOxygen, orp, _ORP_THRESHOLD, 2, "Oxygen")
         session.commit()
 
 def main():
@@ -242,10 +247,9 @@ def main():
             print(f'ORP READING: {orp:.2f} mV')
             print(f'PH READING: {pH:.2f} pH')
 
-            temp_relay(temp_f, _TEMP_THRESHOLD)
-            orp_relay(orp)
-
             database_insertion(round(temp_f, 2), round(orp, 2), round(pH, 2))
+
+            print()
 
             lcd = CharLCD(i2c_expander='PCF8574', address=0x27, port=1, cols=20, rows=4, dotsize=8)
             lcd.clear()
