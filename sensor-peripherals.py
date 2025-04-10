@@ -9,8 +9,7 @@ import RPi.GPIO
 from RPLCD.i2c import CharLCD
 from contextlib import contextmanager
 from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime, Boolean
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
 
 ### ----------------------- CONSTANTS
 _ORP_SENSOR_PIN         = 1
