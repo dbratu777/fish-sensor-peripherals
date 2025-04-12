@@ -13,7 +13,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 
 # ----------------------- CONSTANTS
 _ORP_SENSOR_PIN = 1
-_ORP_REFERENCE_VOLTAGE = 4900  # mV
+_ORP_REFERENCE_VOLTAGE = 4500  # mV
 _ORP_ZERO_VOLTAGE = 2385  # ~= 0 mV ORP
 _ORP_SLOPE = -0.708
 _ORP_RELAY_PIN = 24
@@ -56,8 +56,8 @@ _TEMP_FILE = _TEMP_DIR[0] + '/w1_slave'
 RPi.GPIO.setmode(RPi.GPIO.BCM)
 RPi.GPIO.setup(_ORP_RELAY_PIN, RPi.GPIO.OUT)
 RPi.GPIO.setup(_TEMP_RELAY_PIN, RPi.GPIO.OUT)
-RPi.GPIO.output(_ORP_RELAY_PIN, RPi.GPIO.LOW)
-RPi.GPIO.output(_TEMP_RELAY_PIN, RPi.GPIO.LOW)
+RPi.GPIO.output(_ORP_RELAY_PIN, RPi.GPIO.HIGH)
+RPi.GPIO.output(_TEMP_RELAY_PIN, RPi.GPIO.HIGH)
 
 # ----------------------- DISSOLVED OXYGEN FUNCTIONS
 
@@ -69,7 +69,13 @@ def read_orp():
         print(
             f'\nWARNING: UNABLE TO READ VOLTAGE FROM ORP SENSOR ON PIN {_ORP_SENSOR_PIN}\n')
         return 0.0
-    return (voltage - _ORP_ZERO_VOLTAGE) / _ORP_SLOPE
+    return ((voltage - _ORP_ZERO_VOLTAGE) / _ORP_SLOPE) - 480
+
+# def read_orp():
+#     voltage = _ADC.read_adc(_ORP_SENSOR_PIN, gain=_GAIN) / \
+#         32767.0 * _ORP_REFERENCE_VOLTAGE / 1000
+#     orp_mv = (2.5 - voltage) / 1.037 * 1000.0  # * 1000 to get mV
+#     return orp_mv
 
 
 def orp_relay(activate):
@@ -78,13 +84,14 @@ def orp_relay(activate):
         print(f'\tBUBBLER: ON')
     else:
         RPi.GPIO.output(_ORP_RELAY_PIN, RPi.GPIO.HIGH)
-        print(f'\BUBBLER: OFF')
+        print(f'\tBUBBLER: OFF')
 
 # ----------------------- PH FUNCTIONS
 
 
-def read_ph(temperature):
-    del temperature  # deg C
+# def read_ph(temperature):
+    # del temperature  # deg C
+def read_ph():
     # pH calculation formula based on Nernstian response
     voltage = _ADC.read_adc(_PH_SENSOR_PIN, gain=_GAIN) / \
         32767.0 * _PH_REFERENCE_VOLTAGE
@@ -128,6 +135,13 @@ def temp_relay(activate):
         RPi.GPIO.output(_TEMP_RELAY_PIN, RPi.GPIO.HIGH)
         print(f'\tHEATER: OFF')
 
+
+def read_average(num_readings, read_func):
+    total = 0
+    for _ in range(num_readings):
+        total += read_func()
+        time.sleep(0.01)
+    return total / num_readings
 
 # ----------------------- DATABASE DEFINTIONS
 # TODO: Define as apart of common utils to be included as a submodule for each fish project
@@ -265,8 +279,9 @@ def main():
         # temperature_threshold = float(input("Temperature Threshold (in °F): "))
         while True:
             temp_f = read_temp()
-            orp = read_orp()
-            pH = read_ph((temp_f - 32) * (5.0 / 9.0))
+            orp = read_average(500, read_orp)
+            pH = read_average(10, read_ph)
+            # pH = read_ph((temp_f - 32) * (5.0 / 9.0))
 
             print(f'TEMP READING: {temp_f:.2f} °F')
             print(f'ORP READING: {orp:.2f} mV')
@@ -290,7 +305,7 @@ def main():
                 f'PH:    {pH:.1f} pH {"ALERT!" if _ALERT_STATES["pH"] else ""}\n\r')
 
             # TODO: find a reasonable value to increase this to (no need to flood database)
-            time.sleep(1)
+            time.sleep(5)
 
     except KeyboardInterrupt:
         print("\nINFO: KEYBOARD INTERRUPT DETECTED - SHUTTING DOWN\n")
