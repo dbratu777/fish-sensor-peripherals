@@ -243,17 +243,17 @@ def create_data_entry(session, db_class, value, threshold, alert_type, data_type
     session.add(data_entry)
 
     # Only Generate a Single Unset Alert
-    if data_entry.set_value == 0.0 and not _UNSET_STATES[data_type]:
+    if (data_entry.set_value == 0.0 or data_entry.set_value is None) and not _UNSET_STATES[data_type]:
         create_alert(session, alert_type, f"{data_type} Alert",
                      f'User has not specified set {data_type.lower()}.')
         _UNSET_STATES[data_type] = True
-    else:
+    elif data_entry.set_value != 0.0 and data_entry.set_value is not None:
         # Only Generate a Single Threshold Alert until Vitals Recover
         if (not _ALERT_STATES[data_type] and
                 abs(data_entry.reported_value - data_entry.set_value) > threshold):
             _ALERT_STATES[data_type] = True
             create_alert(session, alert_type, f"{data_type} Alert",
-                         f'The {data_type.lower()} difference exceeded the threshold.\nReported: {data_entry.reported_value}\nSet: {data_entry.reported_value}\nThreshold: {threshold}.')
+                         f'The {data_type.lower()} difference exceeded the threshold.\nReported: {data_entry.reported_value}\nSet: {data_entry.set_value}\nThreshold: {threshold}.')
         elif (_ALERT_STATES[data_type] and
               abs(data_entry.reported_value - data_entry.set_value) <= threshold):
             _ALERT_STATES[data_type] = False
