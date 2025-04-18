@@ -89,7 +89,7 @@ def main():
             if interval != temp_interval:
                 interval = temp_interval
                 time_till_feed += interval - temp_interval
-            if time_till_feed <= 0:
+            if time_till_feed <= 0 and interval != 0:
                 feeder_relay()
                 time_till_feed = interval
 
